@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voxa Lead Finder</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Voxa AI</p>
+        <h1>Lead Finder</h1>
+        <p class="sub">Search a niche + area, save the leads, track who you called, then export to Excel.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <label>Niche
+          <input id="niche" placeholder="Dentists, accountants, landscapers" value="Accountants" />
+        </label>
+        <label>Area
+          <input id="location" placeholder="Mississauga, Ontario" value="Mississauga, Ontario" />
+        </label>
+        <label>Max leads
+          <input id="maxLeads" type="number" min="1" max="200" value="50" />
+        </label>
+      </div>
+      <button id="searchBtn">Generate Leads</button>
+      <div id="progress" class="progress hidden"></div>
+    </section>
+
+    <section id="resultsCard" class="card hidden">
+      <div class="topbar">
+        <div>
+          <h2>Results</h2>
+          <p id="stats"></p>
+        </div>
+        <div class="actions">
+          <button id="hideCalledBtn" class="secondary">Hide Called: ON</button>
+          <a id="exportBtn" class="button" href="#">Download Excel</a>
+        </div>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Business</th>
+              <th>Phone</th>
+              <th>Website</th>
+              <th>Address</th>
+              <th>Rating</th>
+              <th>Called?</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="leadRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
