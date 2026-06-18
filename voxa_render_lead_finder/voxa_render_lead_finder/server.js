@@ -31,6 +31,7 @@ function currentMonthKey() {
 function emptyDb() {
   return {
     searches: {},
+    seenBusinesses: {},
     usage: {
       month: currentMonthKey(),
       textSearchRequests: 0,
@@ -47,6 +48,7 @@ function readDb() {
     const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
 
     if (!db.searches) db.searches = {};
+    if (!db.seenBusinesses) db.seenBusinesses = {};
     if (!db.usage) db.usage = emptyDb().usage;
 
     if (db.usage.month !== currentMonthKey()) {
@@ -109,6 +111,54 @@ function normalizeInput(value) {
   return cleanText(value);
 }
 
+function makeFallbackBusinessKey(lead) {
+  const name = cleanText(lead.businessName || '').toLowerCase();
+  const address = cleanText(lead.address || '').toLowerCase();
+
+  return `${name}|${address}`
+    .replace(/[^a-z0-9|]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function markBusinessAsSeen(db, lead) {
+  if (lead.id) {
+    db.seenBusinesses[`place:${lead.id}`] = {
+      businessName: lead.businessName || '',
+      address: lead.address || '',
+      firstSeenAt: new Date().toISOString()
+    };
+  }
+
+  const fallbackKey = makeFallbackBusinessKey(lead);
+
+  if (fallbackKey && fallbackKey !== '|') {
+    db.seenBusinesses[`fallback:${fallbackKey}`] = {
+      businessName: lead.businessName || '',
+      address: lead.address || '',
+      firstSeenAt: new Date().toISOString()
+    };
+  }
+}
+
+function hasBusinessBeenSeen(db, place) {
+  if (place.id && db.seenBusinesses[`place:${place.id}`]) {
+    return true;
+  }
+
+  const fallbackLead = {
+    businessName: place.displayName?.text || '',
+    address: place.formattedAddress || ''
+  };
+
+  const fallbackKey = makeFallbackBusinessKey(fallbackLead);
+
+  if (fallbackKey && db.seenBusinesses[`fallback:${fallbackKey}`]) {
+    return true;
+  }
+
+  return false;
+}
+
 async function placeDetails(placeId) {
   const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(
     placeId
@@ -142,7 +192,7 @@ async function placeDetails(placeId) {
 
 async function searchPlaces(niche, location, maxLeads) {
   const results = [];
-  const seen = new Set();
+  const localSeenThisSearch = new Set();
 
   let pageToken = null;
   let loops = 0;
@@ -160,7 +210,7 @@ async function searchPlaces(niche, location, maxLeads) {
 
   while (
     results.length < safeMaxLeads &&
-    loops < Math.ceil(safeMaxLeads / 20) + 2
+    loops < Math.ceil(safeMaxLeads / 20) + 5
   ) {
     loops += 1;
 
@@ -189,12 +239,18 @@ async function searchPlaces(niche, location, maxLeads) {
 
     addUsage(1, 0);
 
+    const db = readDb();
     const places = res.data.places || [];
 
     for (const p of places) {
-      if (!p.id || seen.has(p.id) || results.length >= safeMaxLeads) continue;
+      if (!p.id || localSeenThisSearch.has(p.id)) continue;
+      if (results.length >= safeMaxLeads) break;
 
-      seen.add(p.id);
+      localSeenThisSearch.add(p.id);
+
+      if (hasBusinessBeenSeen(db, p)) {
+        continue;
+      }
 
       let d = p;
 
@@ -204,7 +260,7 @@ async function searchPlaces(niche, location, maxLeads) {
         d = p;
       }
 
-      results.push({
+      const lead = {
         id: p.id,
         businessName: cleanText(d.displayName?.text || p.displayName?.text),
         phone: cleanText(d.nationalPhoneNumber || d.internationalPhoneNumber),
@@ -220,7 +276,11 @@ async function searchPlaces(niche, location, maxLeads) {
         ownerPhone: '',
         email: '',
         followUpDate: ''
-      });
+      };
+
+      results.push(lead);
+      markBusinessAsSeen(db, lead);
+      writeDb(db);
     }
 
     pageToken = res.data.nextPageToken;
@@ -340,11 +400,6 @@ app.patch('/api/search/:searchId/lead/:leadId', (req, res) => {
   });
 });
 
-/*
-  OLD EXPORT ROUTE:
-  This route exports from the saved backend search.
-  Keeping it here is fine, but the new front-end export below does NOT rely on this.
-*/
 app.get('/api/search/:searchId/export', async (req, res) => {
   const db = readDb();
   const search = db.searches[req.params.searchId];
@@ -405,11 +460,6 @@ app.get('/api/search/:searchId/export', async (req, res) => {
   res.end();
 });
 
-/*
-  NEW EXPORT ROUTE:
-  This fixes "Search not found" because it exports the leads currently showing
-  on your screen instead of relying on Render finding the saved search later.
-*/
 app.post('/api/export', async (req, res) => {
   try {
     const { niche = 'leads', location = 'area', leads = [] } = req.body || {};
