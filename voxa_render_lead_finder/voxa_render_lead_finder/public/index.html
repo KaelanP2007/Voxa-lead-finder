@@ -12,23 +12,51 @@
       <div>
         <p class="eyebrow">Voxa AI</p>
         <h1>Lead Finder</h1>
-        <p class="sub">Search a niche + area, save the leads, track who you called, then export to Excel.</p>
+        <p class="sub">
+          Search a niche + area, save the leads, track who you called, then export to Excel.
+        </p>
       </div>
+    </section>
+
+    <section class="card usageCard">
+      <div class="usageTop">
+        <div>
+          <h2>Google API Usage Estimate</h2>
+          <p id="usageText" class="muted">Loading usage...</p>
+        </div>
+        <button id="refreshUsageBtn" class="secondary smallBtn">Refresh</button>
+      </div>
+
+      <div class="usageBar">
+        <div id="usageFill"></div>
+      </div>
+
+      <p class="usageNote">
+        This is a local estimate from this app, not your official Google bill.
+        Check Google Cloud Billing for the real remaining free usage.
+      </p>
     </section>
 
     <section class="card">
       <div class="grid">
-        <label>Niche
+        <label>
+          Niche
           <input id="niche" placeholder="Dentists, accountants, landscapers" value="Accountants" />
         </label>
-        <label>Area
+
+        <label>
+          Area
           <input id="location" placeholder="Mississauga, Ontario" value="Mississauga, Ontario" />
         </label>
-        <label>Max leads
-          <input id="maxLeads" type="number" min="1" max="200" value="50" />
+
+        <label>
+          Max leads
+          <input id="maxLeads" type="number" min="1" max="100" value="50" />
         </label>
       </div>
+
       <button id="searchBtn">Generate Leads</button>
+
       <div id="progress" class="progress hidden"></div>
     </section>
 
@@ -38,11 +66,13 @@
           <h2>Results</h2>
           <p id="stats"></p>
         </div>
+
         <div class="actions">
           <button id="hideCalledBtn" class="secondary">Hide Called: ON</button>
           <a id="exportBtn" class="button" href="#">Download Excel</a>
         </div>
       </div>
+
       <div class="tableWrap">
         <table>
           <thead>
@@ -57,11 +87,13 @@
               <th>Notes</th>
             </tr>
           </thead>
+
           <tbody id="leadRows"></tbody>
         </table>
       </div>
     </section>
   </main>
+
   <script src="/app.js"></script>
 </body>
 </html>
