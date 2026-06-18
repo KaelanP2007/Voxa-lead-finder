@@ -122,15 +122,21 @@ function render() {
         lead[field] = value;
       }
 
-      await fetch(`/api/search/${currentSearchId}/lead/${encodeURIComponent(leadId)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          [field]: value
-        })
-      });
+      try {
+        if (currentSearchId) {
+          await fetch(`/api/search/${currentSearchId}/lead/${encodeURIComponent(leadId)}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              [field]: value
+            })
+          });
+        }
+      } catch (err) {
+        console.warn('Could not save lead update to backend:', err);
+      }
 
       render();
     };
@@ -173,7 +179,14 @@ $('searchBtn').onclick = async () => {
     currentSearchId = data.searchId;
     leads = data.leads || [];
 
-    $('exportBtn').href = `/api/search/${currentSearchId}/export`;
+    /*
+      Important:
+      We are no longer using /api/search/:searchId/export for the button.
+      That old way caused "Search not found" on Render.
+      The button now exports the leads currently loaded on the screen.
+    */
+    $('exportBtn').href = '#';
+
     $('resultsCard').classList.remove('hidden');
 
     setProgress(`Done. Found ${leads.length} businesses.`, true);
@@ -197,6 +210,64 @@ $('hideCalledBtn').onclick = () => {
 };
 
 $('refreshUsageBtn').onclick = loadUsage;
+
+$('exportBtn').onclick = async event => {
+  event.preventDefault();
+
+  if (!leads || leads.length === 0) {
+    alert('No leads to export yet.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/export', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        niche: $('niche').value.trim(),
+        location: $('location').value.trim(),
+        leads
+      })
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || 'Export failed.');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+
+    const safeNiche = $('niche')
+      .value
+      .trim()
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+
+    const safeLocation = $('location')
+      .value
+      .trim()
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+
+    a.download = `voxa_leads_${safeNiche}_${safeLocation}.xlsx`;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(`Excel export error: ${err.message}`);
+  }
+};
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>'"]/g, char => {
