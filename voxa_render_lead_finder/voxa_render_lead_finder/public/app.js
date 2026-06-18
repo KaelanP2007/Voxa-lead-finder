@@ -26,6 +26,25 @@ function renderUsage(usage) {
     `Text Search: ${usage.textSearchRequests}. Details: ${usage.placeDetailsRequests}.`;
 }
 
+async function loadSavedUsage() {
+  try {
+    const res = await fetch(`/api/usage?t=${Date.now()}`, {
+      method: 'GET',
+      cache: 'no-store'
+    });
+
+    if (!res.ok) {
+      throw new Error('Could not load usage.');
+    }
+
+    const usage = await res.json();
+    renderUsage(usage);
+  } catch (err) {
+    $('usageText').textContent =
+      'Saved usage unavailable right now. It will update after your next search.';
+  }
+}
+
 function render() {
   const rows = $('leadRows');
   rows.innerHTML = '';
@@ -155,6 +174,7 @@ $('searchBtn').onclick = async () => {
       headers: {
         'Content-Type': 'application/json'
       },
+      cache: 'no-store',
       body: JSON.stringify({
         niche,
         location,
@@ -167,6 +187,8 @@ $('searchBtn').onclick = async () => {
     if (!res.ok) {
       if (data.usage) {
         renderUsage(data.usage);
+      } else {
+        await loadSavedUsage();
       }
 
       throw new Error(data.error || 'Search failed.');
@@ -182,11 +204,14 @@ $('searchBtn').onclick = async () => {
 
     if (data.usage) {
       renderUsage(data.usage);
+    } else {
+      await loadSavedUsage();
     }
 
     render();
   } catch (err) {
     setProgress(`Error: ${err.message}`, true);
+    await loadSavedUsage();
   } finally {
     $('searchBtn').disabled = false;
   }
@@ -270,3 +295,5 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   return escapeHtml(str);
 }
+
+loadSavedUsage();
