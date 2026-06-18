@@ -6,12 +6,18 @@ const $ = id => document.getElementById(id);
 
 function setProgress(text, show = true) {
   const progress = $('progress');
+  if (!progress) return;
+
   progress.textContent = text;
   progress.classList.toggle('hidden', !show);
 }
 
 function renderUsage(usage) {
-  if (!usage) return;
+  if (!usage) {
+    $('usageText').textContent = 'No usage data found yet. Generate leads to start tracking.';
+    $('usageFill').style.width = '0%';
+    return;
+  }
 
   const percent = Math.max(
     0,
@@ -21,27 +27,40 @@ function renderUsage(usage) {
   $('usageFill').style.width = `${percent}%`;
 
   $('usageText').textContent =
-    `${usage.totalGoogleRequests} estimated Google API requests used this month. ` +
-    `${usage.estimatedRemaining} remaining out of your local ${usage.monthlyBudget} request budget. ` +
-    `Text Search: ${usage.textSearchRequests}. Details: ${usage.placeDetailsRequests}.`;
+    `${usage.totalGoogleRequests || 0} estimated Google API requests used this month. ` +
+    `${usage.estimatedRemaining || 0} remaining out of your local ${usage.monthlyBudget || 0} request budget. ` +
+    `Text Search: ${usage.textSearchRequests || 0}. Details: ${usage.placeDetailsRequests || 0}.`;
 }
 
 async function loadSavedUsage() {
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 6000);
+
   try {
     const res = await fetch(`/api/usage?t=${Date.now()}`, {
       method: 'GET',
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: controller.signal
     });
 
+    clearTimeout(timeout);
+
     if (!res.ok) {
-      throw new Error('Could not load usage.');
+      throw new Error('Could not load saved usage.');
     }
 
     const usage = await res.json();
     renderUsage(usage);
   } catch (err) {
+    clearTimeout(timeout);
+
     $('usageText').textContent =
-      'Saved usage unavailable right now. It will update after your next search.';
+      'Saved usage is unavailable right now. It will update after your next lead search.';
+
+    $('usageFill').style.width = '0%';
   }
 }
 
@@ -154,131 +173,137 @@ function render() {
   });
 }
 
-$('searchBtn').onclick = async () => {
-  const niche = $('niche').value.trim();
-  const location = $('location').value.trim();
-  const maxLeads = $('maxLeads').value;
+function setupSearchButton() {
+  $('searchBtn').onclick = async () => {
+    const niche = $('niche').value.trim();
+    const location = $('location').value.trim();
+    const maxLeads = $('maxLeads').value;
 
-  if (!niche || !location) {
-    alert('Enter both niche and area.');
-    return;
-  }
+    if (!niche || !location) {
+      alert('Enter both niche and area.');
+      return;
+    }
 
-  $('searchBtn').disabled = true;
+    $('searchBtn').disabled = true;
 
-  setProgress('Searching Google Places... 100 leads can take 1-3 minutes.');
+    setProgress('Searching Google Places... 100 leads can take 1-3 minutes.');
 
-  try {
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      cache: 'no-store',
-      body: JSON.stringify({
-        niche,
-        location,
-        maxLeads
-      })
-    });
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          niche,
+          location,
+          maxLeads
+        })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
+      if (!res.ok) {
+        if (data.usage) {
+          renderUsage(data.usage);
+        } else {
+          await loadSavedUsage();
+        }
+
+        throw new Error(data.error || 'Search failed.');
+      }
+
+      currentSearchId = data.searchId;
+      leads = data.leads || [];
+
+      $('exportBtn').href = '#';
+      $('resultsCard').classList.remove('hidden');
+
+      setProgress(`Done. Found ${leads.length} businesses.`, true);
+
       if (data.usage) {
         renderUsage(data.usage);
       } else {
         await loadSavedUsage();
       }
 
-      throw new Error(data.error || 'Search failed.');
-    }
-
-    currentSearchId = data.searchId;
-    leads = data.leads || [];
-
-    $('exportBtn').href = '#';
-    $('resultsCard').classList.remove('hidden');
-
-    setProgress(`Done. Found ${leads.length} businesses.`, true);
-
-    if (data.usage) {
-      renderUsage(data.usage);
-    } else {
+      render();
+    } catch (err) {
+      setProgress(`Error: ${err.message}`, true);
       await loadSavedUsage();
+    } finally {
+      $('searchBtn').disabled = false;
     }
+  };
+}
 
+function setupHideCalledButton() {
+  $('hideCalledBtn').onclick = () => {
+    hideCalled = !hideCalled;
     render();
-  } catch (err) {
-    setProgress(`Error: ${err.message}`, true);
-    await loadSavedUsage();
-  } finally {
-    $('searchBtn').disabled = false;
-  }
-};
+  };
+}
 
-$('hideCalledBtn').onclick = () => {
-  hideCalled = !hideCalled;
-  render();
-};
+function setupExportButton() {
+  $('exportBtn').onclick = async event => {
+    event.preventDefault();
 
-$('exportBtn').onclick = async event => {
-  event.preventDefault();
-
-  if (!leads || leads.length === 0) {
-    alert('No leads to export yet.');
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/export', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        niche: $('niche').value.trim(),
-        location: $('location').value.trim(),
-        leads
-      })
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || 'Export failed.');
+    if (!leads || leads.length === 0) {
+      alert('No leads to export yet.');
+      return;
     }
 
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          niche: $('niche').value.trim(),
+          location: $('location').value.trim(),
+          leads
+        })
+      });
 
-    const a = document.createElement('a');
-    a.href = url;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Export failed.');
+      }
 
-    const safeNiche = $('niche')
-      .value
-      .trim()
-      .replace(/[^a-z0-9]+/gi, '_')
-      .replace(/^_+|_+$/g, '')
-      .toLowerCase();
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
 
-    const safeLocation = $('location')
-      .value
-      .trim()
-      .replace(/[^a-z0-9]+/gi, '_')
-      .replace(/^_+|_+$/g, '')
-      .toLowerCase();
+      const a = document.createElement('a');
+      a.href = url;
 
-    a.download = `voxa_leads_${safeNiche}_${safeLocation}.xlsx`;
+      const safeNiche = $('niche')
+        .value
+        .trim()
+        .replace(/[^a-z0-9]+/gi, '_')
+        .replace(/^_+|_+$/g, '')
+        .toLowerCase();
 
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+      const safeLocation = $('location')
+        .value
+        .trim()
+        .replace(/[^a-z0-9]+/gi, '_')
+        .replace(/^_+|_+$/g, '')
+        .toLowerCase();
 
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    alert(`Excel export error: ${err.message}`);
-  }
-};
+      a.download = `voxa_leads_${safeNiche}_${safeLocation}.xlsx`;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Excel export error: ${err.message}`);
+    }
+  };
+}
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>'"]/g, char => {
@@ -296,4 +321,9 @@ function escapeAttr(str) {
   return escapeHtml(str);
 }
 
-loadSavedUsage();
+document.addEventListener('DOMContentLoaded', async () => {
+  setupSearchButton();
+  setupHideCalledButton();
+  setupExportButton();
+  await loadSavedUsage();
+});
