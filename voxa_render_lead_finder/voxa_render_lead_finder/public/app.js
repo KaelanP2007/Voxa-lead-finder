@@ -5,48 +5,133 @@ let hideCalled = true;
 const $ = id => document.getElementById(id);
 
 function setProgress(text, show = true) {
-  const p = $('progress');
-  p.textContent = text;
-  p.classList.toggle('hidden', !show);
+  const progress = $('progress');
+  progress.textContent = text;
+  progress.classList.toggle('hidden', !show);
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch('/api/usage');
+    const data = await res.json();
+    renderUsage(data);
+  } catch (err) {
+    $('usageText').textContent = 'Usage estimate unavailable.';
+  }
+}
+
+function renderUsage(usage) {
+  const percent = Math.max(
+    0,
+    Math.min(100, Number(usage.percentUsed || 0))
+  );
+
+  $('usageFill').style.width = `${percent}%`;
+
+  $('usageText').textContent =
+    `${usage.totalGoogleRequests} estimated Google API requests used this month. ` +
+    `${usage.estimatedRemaining} remaining out of your local ${usage.monthlyBudget} request budget. ` +
+    `Text Search: ${usage.textSearchRequests}. Details: ${usage.placeDetailsRequests}.`;
 }
 
 function render() {
   const rows = $('leadRows');
   rows.innerHTML = '';
-  const visible = hideCalled ? leads.filter(l => l.called !== 'Yes') : leads;
-  const called = leads.filter(l => l.called === 'Yes').length;
-  $('stats').textContent = `Total: ${leads.length} | Remaining: ${leads.length - called} | Called: ${called}`;
+
+  const visibleLeads = hideCalled
+    ? leads.filter(lead => lead.called !== 'Yes')
+    : leads;
+
+  const calledCount = leads.filter(lead => lead.called === 'Yes').length;
+
+  $('stats').textContent =
+    `Total: ${leads.length} | Remaining: ${leads.length - calledCount} | Called: ${calledCount}`;
+
   $('hideCalledBtn').textContent = `Hide Called: ${hideCalled ? 'ON' : 'OFF'}`;
 
-  for (const lead of visible) {
+  for (const lead of visibleLeads) {
     const tr = document.createElement('tr');
+
     tr.innerHTML = `
-      <td><div class="biz">${escapeHtml(lead.businessName || '')}</div><div class="muted">${escapeHtml(lead.googleMaps || '')}</div></td>
+      <td>
+        <div class="biz">${escapeHtml(lead.businessName || '')}</div>
+        <div class="muted">
+          ${
+            lead.googleMaps
+              ? `<a class="link" href="${escapeAttr(lead.googleMaps)}" target="_blank">Google Maps</a>`
+              : ''
+          }
+        </div>
+      </td>
+
       <td>${escapeHtml(lead.phone || '')}</td>
-      <td>${lead.website ? `<a class="link" href="${escapeAttr(lead.website)}" target="_blank">Website</a>` : ''}</td>
+
+      <td>
+        ${
+          lead.website
+            ? `<a class="link" href="${escapeAttr(lead.website)}" target="_blank">Website</a>`
+            : ''
+        }
+      </td>
+
       <td>${escapeHtml(lead.address || '')}</td>
+
       <td>${escapeHtml(String(lead.rating || ''))}</td>
-      <td><select class="mini" data-id="${lead.id}" data-field="called"><option>No</option><option ${lead.called==='Yes'?'selected':''}>Yes</option></select></td>
-      <td><select class="mini" data-id="${lead.id}" data-field="status">
-        ${['New','No Answer','Interested','Follow Up','Booked Demo','Not Interested'].map(s => `<option ${lead.status===s?'selected':''}>${s}</option>`).join('')}
-      </select></td>
-      <td><textarea class="notes" data-id="${lead.id}" data-field="notes">${escapeHtml(lead.notes || '')}</textarea></td>
+
+      <td>
+        <select class="mini" data-id="${escapeAttr(lead.id)}" data-field="called">
+          <option ${lead.called === 'No' ? 'selected' : ''}>No</option>
+          <option ${lead.called === 'Yes' ? 'selected' : ''}>Yes</option>
+        </select>
+      </td>
+
+      <td>
+        <select class="mini" data-id="${escapeAttr(lead.id)}" data-field="status">
+          ${[
+            'New',
+            'No Answer',
+            'Interested',
+            'Follow Up',
+            'Booked Demo',
+            'Not Interested'
+          ]
+            .map(status => `<option ${lead.status === status ? 'selected' : ''}>${status}</option>`)
+            .join('')}
+        </select>
+      </td>
+
+      <td>
+        <textarea class="notes" data-id="${escapeAttr(lead.id)}" data-field="notes">${escapeHtml(
+          lead.notes || ''
+        )}</textarea>
+      </td>
     `;
+
     rows.appendChild(tr);
   }
 
-  document.querySelectorAll('select, textarea').forEach(el => {
-    el.onchange = async () => {
-      const id = el.dataset.id;
-      const field = el.dataset.field;
-      const value = el.value;
-      const lead = leads.find(l => l.id === id);
-      if (lead) lead[field] = value;
-      await fetch(`/api/search/${currentSearchId}/lead/${encodeURIComponent(id)}`, {
+  document.querySelectorAll('select, textarea').forEach(element => {
+    element.onchange = async () => {
+      const leadId = element.dataset.id;
+      const field = element.dataset.field;
+      const value = element.value;
+
+      const lead = leads.find(item => item.id === leadId);
+
+      if (lead) {
+        lead[field] = value;
+      }
+
+      await fetch(`/api/search/${currentSearchId}/lead/${encodeURIComponent(leadId)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          [field]: value
+        })
       });
+
       render();
     };
   });
@@ -56,34 +141,77 @@ $('searchBtn').onclick = async () => {
   const niche = $('niche').value.trim();
   const location = $('location').value.trim();
   const maxLeads = $('maxLeads').value;
-  if (!niche || !location) return alert('Enter both niche and area.');
+
+  if (!niche || !location) {
+    alert('Enter both niche and area.');
+    return;
+  }
 
   $('searchBtn').disabled = true;
-  setProgress('Searching Google Places... this can take 30-90 seconds.');
+
+  setProgress('Searching Google Places... 100 leads can take 1-3 minutes.');
+
   try {
     const res = await fetch('/api/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ niche, location, maxLeads })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        niche,
+        location,
+        maxLeads
+      })
     });
+
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Search failed');
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Search failed.');
+    }
+
     currentSearchId = data.searchId;
     leads = data.leads || [];
+
     $('exportBtn').href = `/api/search/${currentSearchId}/export`;
     $('resultsCard').classList.remove('hidden');
+
     setProgress(`Done. Found ${leads.length} businesses.`, true);
+
+    if (data.usage) {
+      renderUsage(data.usage);
+    }
+
     render();
   } catch (err) {
     setProgress(`Error: ${err.message}`, true);
+    loadUsage();
   } finally {
     $('searchBtn').disabled = false;
   }
 };
 
-$('hideCalledBtn').onclick = () => { hideCalled = !hideCalled; render(); };
+$('hideCalledBtn').onclick = () => {
+  hideCalled = !hideCalled;
+  render();
+};
+
+$('refreshUsageBtn').onclick = loadUsage;
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  return String(str).replace(/[&<>'"]/g, char => {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[char];
+  });
 }
-function escapeAttr(str) { return escapeHtml(str); }
+
+function escapeAttr(str) {
+  return escapeHtml(str);
+}
+
+loadUsage();
