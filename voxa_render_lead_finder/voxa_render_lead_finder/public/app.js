@@ -10,17 +10,9 @@ function setProgress(text, show = true) {
   progress.classList.toggle('hidden', !show);
 }
 
-async function loadUsage() {
-  try {
-    const res = await fetch('/api/usage');
-    const data = await res.json();
-    renderUsage(data);
-  } catch (err) {
-    $('usageText').textContent = 'Usage estimate unavailable.';
-  }
-}
-
 function renderUsage(usage) {
+  if (!usage) return;
+
   const percent = Math.max(
     0,
     Math.min(100, Number(usage.percentUsed || 0))
@@ -173,20 +165,17 @@ $('searchBtn').onclick = async () => {
     const data = await res.json();
 
     if (!res.ok) {
+      if (data.usage) {
+        renderUsage(data.usage);
+      }
+
       throw new Error(data.error || 'Search failed.');
     }
 
     currentSearchId = data.searchId;
     leads = data.leads || [];
 
-    /*
-      Important:
-      We are no longer using /api/search/:searchId/export for the button.
-      That old way caused "Search not found" on Render.
-      The button now exports the leads currently loaded on the screen.
-    */
     $('exportBtn').href = '#';
-
     $('resultsCard').classList.remove('hidden');
 
     setProgress(`Done. Found ${leads.length} businesses.`, true);
@@ -198,7 +187,6 @@ $('searchBtn').onclick = async () => {
     render();
   } catch (err) {
     setProgress(`Error: ${err.message}`, true);
-    loadUsage();
   } finally {
     $('searchBtn').disabled = false;
   }
@@ -208,8 +196,6 @@ $('hideCalledBtn').onclick = () => {
   hideCalled = !hideCalled;
   render();
 };
-
-$('refreshUsageBtn').onclick = loadUsage;
 
 $('exportBtn').onclick = async event => {
   event.preventDefault();
@@ -284,5 +270,3 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   return escapeHtml(str);
 }
-
-loadUsage();
