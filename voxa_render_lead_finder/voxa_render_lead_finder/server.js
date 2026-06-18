@@ -13,7 +13,7 @@ const DB_PATH = path.join(__dirname, 'data', 'leads.json');
 
 const MONTHLY_GOOGLE_REQUEST_BUDGET = Math.max(
   1,
-  Number(process.env.MONTHLY_GOOGLE_REQUEST_BUDGET || 10000)
+  Number(process.env.MONTHLY_GOOGLE_REQUEST_BUDGET || 1000)
 );
 
 const MAX_LEADS_PER_SEARCH = Math.max(
@@ -21,7 +21,7 @@ const MAX_LEADS_PER_SEARCH = Math.max(
   Number(process.env.MAX_LEADS_PER_SEARCH || 100)
 );
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 function currentMonthKey() {
@@ -340,6 +340,11 @@ app.patch('/api/search/:searchId/lead/:leadId', (req, res) => {
   });
 });
 
+/*
+  OLD EXPORT ROUTE:
+  This route exports from the saved backend search.
+  Keeping it here is fine, but the new front-end export below does NOT rely on this.
+*/
 app.get('/api/search/:searchId/export', async (req, res) => {
   const db = readDb();
   const search = db.searches[req.params.searchId];
@@ -349,7 +354,6 @@ app.get('/api/search/:searchId/export', async (req, res) => {
   }
 
   const workbook = new ExcelJS.Workbook();
-
   const sheet = workbook.addWorksheet('All Leads');
 
   sheet.columns = [
@@ -399,6 +403,74 @@ app.get('/api/search/:searchId/export', async (req, res) => {
 
   await workbook.xlsx.write(res);
   res.end();
+});
+
+/*
+  NEW EXPORT ROUTE:
+  This fixes "Search not found" because it exports the leads currently showing
+  on your screen instead of relying on Render finding the saved search later.
+*/
+app.post('/api/export', async (req, res) => {
+  try {
+    const { niche = 'leads', location = 'area', leads = [] } = req.body || {};
+
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).send('No leads to export.');
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('All Leads');
+
+    sheet.columns = [
+      { header: 'Business Name', key: 'businessName', width: 32 },
+      { header: 'Phone', key: 'phone', width: 18 },
+      { header: 'Website', key: 'website', width: 34 },
+      { header: 'Address', key: 'address', width: 42 },
+      { header: 'Rating', key: 'rating', width: 10 },
+      { header: 'Review Count', key: 'reviewCount', width: 14 },
+      { header: 'Google Maps', key: 'googleMaps', width: 34 },
+      { header: 'Called?', key: 'called', width: 12 },
+      { header: 'Status', key: 'status', width: 18 },
+      { header: 'Owner Name', key: 'ownerName', width: 22 },
+      { header: 'Owner Phone', key: 'ownerPhone', width: 18 },
+      { header: 'Email', key: 'email', width: 28 },
+      { header: 'Follow Up Date', key: 'followUpDate', width: 16 },
+      { header: 'Notes', key: 'notes', width: 40 }
+    ];
+
+    sheet.addRows(leads);
+
+    sheet.getRow(1).font = { bold: true };
+    sheet.autoFilter = 'A1:N1';
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    sheet.eachRow(row => {
+      row.alignment = {
+        vertical: 'top',
+        wrapText: true
+      };
+    });
+
+    const safe = `${niche}_${location}`
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="voxa_leads_${safe}.xlsx"`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).send(err.message || 'Export failed.');
+  }
 });
 
 app.listen(PORT, () => {
