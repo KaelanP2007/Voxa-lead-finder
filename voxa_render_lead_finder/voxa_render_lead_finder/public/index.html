@@ -13,7 +13,7 @@
         <p class="eyebrow">Voxa AI</p>
         <h1>Lead Finder</h1>
         <p class="sub">
-          Search a niche + area, save the leads, track who you called, then export to Excel.
+          Search a niche + area, filter for smaller businesses, track who you called, then export to Excel.
         </p>
       </div>
     </section>
@@ -56,6 +56,42 @@
         </label>
       </div>
 
+      <div class="filterBox">
+        <div class="filterHeader">
+          <h3>Small Business Filters</h3>
+          <p>
+            These filters prioritize smaller, owner-operated businesses that may miss calls.
+          </p>
+        </div>
+
+        <div class="filterGrid">
+          <label class="check">
+            <input id="smallBusinessOnly" type="checkbox" checked />
+            Only show likely small businesses
+          </label>
+
+          <label>
+            Minimum small business score
+            <input id="minSmallBusinessScore" type="number" min="0" max="100" value="55" />
+          </label>
+
+          <label class="check">
+            <input id="hideHighReviewCompanies" type="checkbox" checked />
+            Hide high-review companies
+          </label>
+
+          <label>
+            Hide companies with reviews over
+            <input id="maxReviewCount" type="number" min="1" max="1000" value="100" />
+          </label>
+
+          <label class="check">
+            <input id="hideProperWebsites" type="checkbox" />
+            Hide companies with proper websites
+          </label>
+        </div>
+      </div>
+
       <button id="searchBtn">Generate Leads</button>
 
       <div id="progress" class="progress hidden"></div>
@@ -82,7 +118,9 @@
               <th>Phone</th>
               <th>Website</th>
               <th>Address</th>
-              <th>Rating</th>
+              <th>Reviews</th>
+              <th>Small Biz Score</th>
+              <th>Why</th>
               <th>Called?</th>
               <th>Status</th>
               <th>Notes</th>
@@ -95,6 +133,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>
