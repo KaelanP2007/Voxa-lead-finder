@@ -64,6 +64,14 @@ async function loadSavedUsage() {
   }
 }
 
+function scoreClass(score) {
+  const num = Number(score || 0);
+
+  if (num >= 70) return 'scoreHigh';
+  if (num >= 45) return 'scoreMedium';
+  return 'scoreLow';
+}
+
 function render() {
   const rows = $('leadRows');
   rows.innerHTML = '';
@@ -81,6 +89,9 @@ function render() {
 
   for (const lead of visibleLeads) {
     const tr = document.createElement('tr');
+
+    const score = Number(lead.smallBusinessScore || 0);
+    const reasons = lead.smallBusinessReasons || '';
 
     tr.innerHTML = `
       <td>
@@ -100,13 +111,23 @@ function render() {
         ${
           lead.website
             ? `<a class="link" href="${escapeAttr(lead.website)}" target="_blank">Website</a>`
-            : ''
+            : '<span class="muted">No website</span>'
         }
       </td>
 
       <td>${escapeHtml(lead.address || '')}</td>
 
-      <td>${escapeHtml(String(lead.rating || ''))}</td>
+      <td>${escapeHtml(String(lead.reviewCount || '0'))}</td>
+
+      <td>
+        <span class="scorePill ${scoreClass(score)}">
+          ${score}/100
+        </span>
+      </td>
+
+      <td>
+        <div class="reasons">${escapeHtml(reasons)}</div>
+      </td>
 
       <td>
         <select class="mini" data-id="${escapeAttr(lead.id)}" data-field="called">
@@ -179,6 +200,12 @@ function setupSearchButton() {
     const location = $('location').value.trim();
     const maxLeads = $('maxLeads').value;
 
+    const smallBusinessOnly = $('smallBusinessOnly').checked;
+    const minSmallBusinessScore = $('minSmallBusinessScore').value;
+    const hideHighReviewCompanies = $('hideHighReviewCompanies').checked;
+    const maxReviewCount = $('maxReviewCount').value;
+    const hideProperWebsites = $('hideProperWebsites').checked;
+
     if (!niche || !location) {
       alert('Enter both niche and area.');
       return;
@@ -186,7 +213,7 @@ function setupSearchButton() {
 
     $('searchBtn').disabled = true;
 
-    setProgress('Searching Google Places... 100 leads can take 1-3 minutes.');
+    setProgress('Searching Google Places and scoring small-business fit...');
 
     try {
       const res = await fetch('/api/search', {
@@ -198,7 +225,12 @@ function setupSearchButton() {
         body: JSON.stringify({
           niche,
           location,
-          maxLeads
+          maxLeads,
+          smallBusinessOnly,
+          minSmallBusinessScore,
+          hideHighReviewCompanies,
+          maxReviewCount,
+          hideProperWebsites
         })
       });
 
@@ -220,7 +252,7 @@ function setupSearchButton() {
       $('exportBtn').href = '#';
       $('resultsCard').classList.remove('hidden');
 
-      setProgress(`Done. Found ${leads.length} businesses.`, true);
+      setProgress(`Done. Found ${leads.length} filtered businesses.`, true);
 
       if (data.usage) {
         renderUsage(data.usage);
@@ -326,4 +358,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupHideCalledButton();
   setupExportButton();
   await loadSavedUsage();
-});
+});;
