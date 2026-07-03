@@ -41,6 +41,10 @@ h2 {
   margin: 0 0 4px;
 }
 
+h3 {
+  margin: 0 0 6px;
+}
+
 .sub {
   margin: 8px 0 0;
   color: #d9e3f0;
@@ -142,7 +146,7 @@ button:disabled {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1050px;
+  min-width: 1250px;
 }
 
 th,
@@ -216,13 +220,81 @@ td {
   margin: 10px 0 0;
 }
 
-.smallBtn {
-  padding: 9px 12px;
-  margin-top: 0;
+.filterBox {
+  margin-top: 18px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 16px;
+  padding: 16px;
 }
 
-@media (max-width: 800px) {
+.filterHeader p {
+  margin: 0 0 14px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.2fr 1fr 1.4fr;
+  gap: 12px;
+  align-items: end;
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.check input {
+  width: auto;
+  margin: 0;
+}
+
+.scorePill {
+  display: inline-block;
+  min-width: 70px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.scoreHigh {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.scoreMedium {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.scoreLow {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.reasons {
+  width: 260px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+@media (max-width: 950px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filterGrid {
     grid-template-columns: 1fr;
   }
 
