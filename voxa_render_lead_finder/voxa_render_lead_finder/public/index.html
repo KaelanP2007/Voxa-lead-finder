@@ -13,7 +13,7 @@
         <p class="eyebrow">Voxa AI</p>
         <h1>Lead Finder</h1>
         <p class="sub">
-          Search a niche + area, filter for smaller businesses, track who you called, then export to Excel.
+          Search a niche + area, rank smaller businesses, track who you called, then export to Excel.
         </p>
       </div>
     </section>
@@ -42,12 +42,12 @@
       <div class="grid">
         <label>
           Niche
-          <input id="niche" placeholder="Dentists, accountants, landscapers" value="Accountants" />
+          <input id="niche" placeholder="Dentists, accountants, landscapers, plumbers" value="plumber" />
         </label>
 
         <label>
           Area
-          <input id="location" placeholder="Mississauga, Ontario" value="Mississauga, Ontario" />
+          <input id="location" placeholder="Toronto, Ontario" value="toronto, Ontario" />
         </label>
 
         <label>
@@ -60,29 +60,29 @@
         <div class="filterHeader">
           <h3>Small Business Filters</h3>
           <p>
-            These filters prioritize smaller, owner-operated businesses that may miss calls.
+            Best setup: leave strict filters off first. The app will still score and rank businesses, so you can call the best small-business fits first.
           </p>
         </div>
 
         <div class="filterGrid">
           <label class="check">
-            <input id="smallBusinessOnly" type="checkbox" checked />
+            <input id="smallBusinessOnly" type="checkbox" />
             Only show likely small businesses
           </label>
 
           <label>
             Minimum small business score
-            <input id="minSmallBusinessScore" type="number" min="0" max="100" value="55" />
+            <input id="minSmallBusinessScore" type="number" min="0" max="100" value="25" />
           </label>
 
           <label class="check">
-            <input id="hideHighReviewCompanies" type="checkbox" checked />
+            <input id="hideHighReviewCompanies" type="checkbox" />
             Hide high-review companies
           </label>
 
           <label>
             Hide companies with reviews over
-            <input id="maxReviewCount" type="number" min="1" max="1000" value="100" />
+            <input id="maxReviewCount" type="number" min="1" max="1000" value="300" />
           </label>
 
           <label class="check">
@@ -133,6 +133,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>
