@@ -194,26 +194,37 @@ function render() {
   });
 }
 
-function setupSearchButton() {
-  $('searchBtn').onclick = async () => {
+function setupSearchButtons() {
+  const runSearch = async noWebsiteOnly => {
     const niche = $('niche').value.trim();
     const location = $('location').value.trim();
     const maxLeads = $('maxLeads').value;
 
-    const smallBusinessOnly = $('smallBusinessOnly').checked;
+    let smallBusinessOnly = $('smallBusinessOnly').checked;
     const minSmallBusinessScore = $('minSmallBusinessScore').value;
-    const hideHighReviewCompanies = $('hideHighReviewCompanies').checked;
+    let hideHighReviewCompanies = $('hideHighReviewCompanies').checked;
     const maxReviewCount = $('maxReviewCount').value;
-    const hideProperWebsites = $('hideProperWebsites').checked;
+    let hideProperWebsites = $('hideProperWebsites').checked;
 
     if (!niche || !location) {
       alert('Enter both niche and area.');
       return;
     }
 
-    $('searchBtn').disabled = true;
+    if (noWebsiteOnly) {
+      smallBusinessOnly = false;
+      hideHighReviewCompanies = false;
+      hideProperWebsites = true;
+    }
 
-    setProgress('Searching Google Places and scoring small-business fit...');
+    $('searchBtn').disabled = true;
+    $('noWebsiteBtn').disabled = true;
+
+    setProgress(
+      noWebsiteOnly
+        ? 'Quick-searching multiple Google result sets for businesses with no website...'
+        : 'Searching Google Places and scoring small-business fit...'
+    );
 
     try {
       const res = await fetch('/api/search', {
@@ -230,7 +241,8 @@ function setupSearchButton() {
           minSmallBusinessScore,
           hideHighReviewCompanies,
           maxReviewCount,
-          hideProperWebsites
+          hideProperWebsites,
+          noWebsiteOnly
         })
       });
 
@@ -252,7 +264,13 @@ function setupSearchButton() {
       $('exportBtn').href = '#';
       $('resultsCard').classList.remove('hidden');
 
-      setProgress(`Done. Found ${leads.length} filtered businesses.`, true);
+      const checked = data.candidatesChecked || leads.length;
+      setProgress(
+        noWebsiteOnly
+          ? `Done. Found ${leads.length} businesses with no website after checking ${checked} unique businesses.`
+          : `Done. Found ${leads.length} businesses.`,
+        true
+      );
 
       if (data.usage) {
         renderUsage(data.usage);
@@ -266,8 +284,12 @@ function setupSearchButton() {
       await loadSavedUsage();
     } finally {
       $('searchBtn').disabled = false;
+      $('noWebsiteBtn').disabled = false;
     }
   };
+
+  $('searchBtn').onclick = () => runSearch(false);
+  $('noWebsiteBtn').onclick = () => runSearch(true);
 }
 
 function setupHideCalledButton() {
@@ -354,8 +376,9 @@ function escapeAttr(str) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  setupSearchButton();
+  setupSearchButtons();
   setupHideCalledButton();
   setupExportButton();
   await loadSavedUsage();
 });;
+
