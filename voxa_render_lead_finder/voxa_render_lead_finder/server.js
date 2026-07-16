@@ -366,44 +366,107 @@ function passesSmallBusinessFilters(lead, filters) {
   return true;
 }
 
-async function placeDetails(placeId) {
-  const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(
-    placeId
-  )}`;
+const SEARCH_FIELD_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.nationalPhoneNumber',
+  'places.internationalPhoneNumber',
+  'places.websiteUri',
+  'places.rating',
+  'places.userRatingCount',
+  'places.businessStatus',
+  'places.googleMapsUri',
+  'places.regularOpeningHours',
+  'nextPageToken'
+].join(',');
 
-  const fieldMask = [
-    'id',
-    'displayName',
-    'formattedAddress',
-    'nationalPhoneNumber',
-    'internationalPhoneNumber',
-    'websiteUri',
-    'rating',
-    'userRatingCount',
-    'businessStatus',
-    'googleMapsUri',
-    'regularOpeningHours'
-  ].join(',');
+function makeLead(place) {
+  const lead = {
+    id: place.id,
+    businessName: cleanText(place.displayName?.text),
+    phone: cleanText(place.nationalPhoneNumber || place.internationalPhoneNumber),
+    website: cleanText(place.websiteUri),
+    address: cleanText(place.formattedAddress),
+    rating: place.rating || '',
+    reviewCount: place.userRatingCount || '',
+    googleMaps: cleanText(place.googleMapsUri),
+    status: 'New',
+    called: 'No',
+    notes: '',
+    ownerName: '',
+    ownerPhone: '',
+    email: '',
+    followUpDate: '',
+    smallBusinessScore: 0,
+    smallBusinessReasons: ''
+  };
 
-  const res = await axios.get(url, {
-    headers: {
-      'X-Goog-Api-Key': API_KEY,
-      'X-Goog-FieldMask': fieldMask
-    },
-    timeout: 15000
-  });
-
-  addUsage(0, 1);
-
-  return res.data;
+  const fit = calculateSmallBusinessFit(lead, place);
+  lead.smallBusinessScore = fit.score;
+  lead.smallBusinessReasons = fit.reasons.join(', ');
+  return lead;
 }
 
-async function searchPlaces(niche, location, maxLeads, filters) {
+async function searchPlacesPage(textQuery, pageToken = null) {
+  const body = pageToken ? { pageToken } : { textQuery, pageSize: 20 };
+
+  const res = await axios.post(
+    'https://places.googleapis.com/v1/places:searchText',
+    body,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': API_KEY,
+        'X-Goog-FieldMask': SEARCH_FIELD_MASK
+      },
+      timeout: 20000
+    }
+  );
+
+  return {
+    places: res.data.places || [],
+    nextPageToken: res.data.nextPageToken || null
+  };
+}
+
+function collectPlaces({
+  pages,
+  results,
+  localSeenThisSearch,
+  db,
+  safeMaxLeads,
+  filters,
+  noWebsiteOnly
+}) {
+  let candidatesChecked = 0;
+
+  for (const page of pages) {
+    for (const place of page.places) {
+      if (!place.id || localSeenThisSearch.has(place.id)) continue;
+      localSeenThisSearch.add(place.id);
+      candidatesChecked += 1;
+
+      if (hasBusinessBeenSeen(db, place)) continue;
+
+      const lead = makeLead(place);
+      if (noWebsiteOnly && lead.website) continue;
+      if (!passesSmallBusinessFilters(lead, filters)) continue;
+      if (results.length >= safeMaxLeads) continue;
+
+      results.push(lead);
+      markBusinessAsSeen(db, lead);
+    }
+  }
+
+  return candidatesChecked;
+}
+
+async function searchPlaces(niche, location, maxLeads, filters, noWebsiteOnly = false) {
   const results = [];
   const localSeenThisSearch = new Set();
-
-  let pageToken = null;
-  let loops = 0;
+  const db = readDb();
+  let candidatesChecked = 0;
 
   const safeMaxLeads = Math.max(
     1,
@@ -413,103 +476,94 @@ async function searchPlaces(niche, location, maxLeads, filters) {
   const cleanNiche = normalizeInput(niche);
   const cleanLocation = normalizeInput(location);
 
-  const textQuery = `${cleanNiche} in ${cleanLocation}`;
-  const pageSize = Math.min(20, safeMaxLeads);
+  const queries = noWebsiteOnly
+    ? [
+        `${cleanNiche} in ${cleanLocation}`,
+        `local ${cleanNiche} in ${cleanLocation}`,
+        `independent ${cleanNiche} in ${cleanLocation}`,
+        `${cleanNiche} near ${cleanLocation}`
+      ]
+    : [`${cleanNiche} in ${cleanLocation}`];
 
-  while (
-    results.length < safeMaxLeads &&
-    loops < Math.ceil(safeMaxLeads / 20) + 8
-  ) {
-    loops += 1;
-
-    const body = {
+  const initial = await Promise.allSettled(
+    queries.map(async textQuery => ({
       textQuery,
-      pageSize
-    };
+      ...(await searchPlacesPage(textQuery))
+    }))
+  );
 
-    if (pageToken) {
-      body.pageToken = pageToken;
-    }
+  addUsage(queries.length, 0);
 
-    const res = await axios.post(
-      'https://places.googleapis.com/v1/places:searchText',
-      body,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': API_KEY,
-          'X-Goog-FieldMask':
-            'places.id,places.displayName,places.formattedAddress,nextPageToken'
-        },
-        timeout: 20000
-      }
-    );
+  let active = initial
+    .filter(item => item.status === 'fulfilled')
+    .map(item => item.value);
 
-    addUsage(1, 0);
-
-    const db = readDb();
-    const places = res.data.places || [];
-
-    for (const p of places) {
-      if (!p.id || localSeenThisSearch.has(p.id)) continue;
-      if (results.length >= safeMaxLeads) break;
-
-      localSeenThisSearch.add(p.id);
-
-      if (hasBusinessBeenSeen(db, p)) {
-        continue;
-      }
-
-      let d = p;
-
-      try {
-        d = await placeDetails(p.id);
-      } catch (err) {
-        d = p;
-      }
-
-      const lead = {
-        id: p.id,
-        businessName: cleanText(d.displayName?.text || p.displayName?.text),
-        phone: cleanText(d.nationalPhoneNumber || d.internationalPhoneNumber),
-        website: cleanText(d.websiteUri),
-        address: cleanText(d.formattedAddress || p.formattedAddress),
-        rating: d.rating || '',
-        reviewCount: d.userRatingCount || '',
-        googleMaps: cleanText(d.googleMapsUri),
-        status: 'New',
-        called: 'No',
-        notes: '',
-        ownerName: '',
-        ownerPhone: '',
-        email: '',
-        followUpDate: '',
-        smallBusinessScore: 0,
-        smallBusinessReasons: ''
-      };
-
-      const fit = calculateSmallBusinessFit(lead, d);
-
-      lead.smallBusinessScore = fit.score;
-      lead.smallBusinessReasons = fit.reasons.join(', ');
-
-      if (!passesSmallBusinessFilters(lead, filters)) {
-        continue;
-      }
-
-      results.push(lead);
-      markBusinessAsSeen(db, lead);
-      writeDb(db);
-    }
-
-    pageToken = res.data.nextPageToken;
-
-    if (!pageToken) break;
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  if (!active.length) {
+    throw initial[0].reason;
   }
 
-  return results;
+  candidatesChecked += collectPlaces({
+    pages: active,
+    results,
+    localSeenThisSearch,
+    db,
+    safeMaxLeads,
+    filters,
+    noWebsiteOnly
+  });
+
+  for (
+    let pageNumber = 2;
+    results.length < safeMaxLeads && pageNumber <= 3;
+    pageNumber += 1
+  ) {
+    const withTokens = active.filter(page => page.nextPageToken);
+    if (!withTokens.length) break;
+
+    const settled = await Promise.allSettled(
+      withTokens.map(async page => ({
+        textQuery: page.textQuery,
+        ...(await searchPlacesPage(page.textQuery, page.nextPageToken))
+      }))
+    );
+
+    addUsage(withTokens.length, 0);
+
+    active = settled
+      .filter(item => item.status === 'fulfilled')
+      .map(item => item.value);
+
+    candidatesChecked += collectPlaces({
+      pages: active,
+      results,
+      localSeenThisSearch,
+      db,
+      safeMaxLeads,
+      filters,
+      noWebsiteOnly
+    });
+  }
+
+  if (noWebsiteOnly) {
+    results.sort(
+      (a, b) =>
+        Number(Boolean(b.phone)) - Number(Boolean(a.phone)) ||
+        Number(b.reviewCount || 0) - Number(a.reviewCount || 0)
+    );
+  } else {
+    results.sort(
+      (a, b) =>
+        Number(b.smallBusinessScore || 0) -
+        Number(a.smallBusinessScore || 0)
+    );
+  }
+
+  writeDb(db);
+
+  return {
+    leads: results.slice(0, safeMaxLeads),
+    candidatesChecked
+  };
 }
 
 app.get('/api/usage', (req, res) => {
@@ -549,7 +603,21 @@ app.post('/api/search', async (req, res) => {
       });
     }
 
-    const leads = await searchPlaces(niche, location, maxLeads, filters);
+    const noWebsiteOnly = req.body.noWebsiteOnly === true;
+
+    if (noWebsiteOnly) {
+      filters.smallBusinessOnly = false;
+      filters.hideHighReviewCompanies = false;
+      filters.hideProperWebsites = true;
+    }
+
+    const { leads, candidatesChecked } = await searchPlaces(
+      niche,
+      location,
+      maxLeads,
+      filters,
+      noWebsiteOnly
+    );
 
     const searchId = uuidv4();
     const db = readDb();
@@ -559,6 +627,7 @@ app.post('/api/search', async (req, res) => {
       niche,
       location,
       filters,
+      noWebsiteOnly,
       createdAt: new Date().toISOString(),
       leads
     };
@@ -568,6 +637,8 @@ app.post('/api/search', async (req, res) => {
     res.json({
       searchId,
       count: leads.length,
+      candidatesChecked,
+      noWebsiteOnly,
       leads,
       usage: usageSummary()
     });
@@ -692,3 +763,4 @@ app.post('/api/export', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Voxa Lead Finder running on port ${PORT}`);
 });
+
