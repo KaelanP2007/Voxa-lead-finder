@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voxa Lead Finder</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=2" />
 </head>
 <body>
   <main class="wrap">
@@ -92,7 +92,16 @@
         </div>
       </div>
 
-      <button id="searchBtn">Generate Leads</button>
+      <div class="searchActions">
+        <button id="searchBtn">Generate Leads</button>
+        <button id="noWebsiteBtn" class="noWebsite">
+          Find Businesses With No Website
+        </button>
+      </div>
+
+      <p class="searchHint">
+        Checks several Google result sets at once, removes duplicates, and puts businesses with phone numbers first.
+      </p>
 
       <div id="progress" class="progress hidden"></div>
     </section>
@@ -133,6 +142,7 @@
     </section>
   </main>
 
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>
+
