@@ -90,7 +90,10 @@ function usageSummary() {
     placeDetailsRequests: usage.placeDetailsRequests || 0,
     totalGoogleRequests: used,
     monthlyBudget: MONTHLY_GOOGLE_REQUEST_BUDGET,
-    estimatedRemaining: Math.max(0, MONTHLY_GOOGLE_REQUEST_BUDGET - used),
+    estimatedRemaining: Math.max(
+      0,
+      MONTHLY_GOOGLE_REQUEST_BUDGET - used
+    ),
     percentUsed: Math.min(
       100,
       Math.round((used / MONTHLY_GOOGLE_REQUEST_BUDGET) * 100)
@@ -151,7 +154,10 @@ function hasBusinessBeenSeen(db, place) {
 
   const fallbackKey = makeFallbackBusinessKey(fallbackLead);
 
-  if (fallbackKey && db.seenBusinesses[`fallback:${fallbackKey}`]) {
+  if (
+    fallbackKey &&
+    db.seenBusinessesBusinesses[`fallback:${fallbackKey}`]
+  ) {
     return true;
   }
 
@@ -197,13 +203,25 @@ function isTollFreePhone(phone) {
 
   if (!digits) return false;
 
-  const normalized = digits.length === 11 && digits.startsWith('1')
-    ? digits.slice(1)
-    : digits;
+  const normalized =
+    digits.length === 11 && digits.startsWith('1')
+      ? digits.slice(1)
+      : digits;
 
-  const tollFreePrefixes = ['800', '888', '877', '866', '855', '844', '833', '822'];
+  const tollFreePrefixes = [
+    '800',
+    '888',
+    '877',
+    '866',
+    '855',
+    '844',
+    '833',
+    '822'
+  ];
 
-  return tollFreePrefixes.some(prefix => normalized.startsWith(prefix));
+  return tollFreePrefixes.some(prefix =>
+    normalized.startsWith(prefix)
+  );
 }
 
 function ownerNameBusinessSignal(name) {
@@ -235,7 +253,9 @@ function ownerNameBusinessSignal(name) {
     /\bsam\b/
   ];
 
-  return personalPatterns.some(pattern => pattern.test(businessName));
+  return personalPatterns.some(pattern =>
+    pattern.test(businessName)
+  );
 }
 
 function corporateNameSignal(name) {
@@ -262,7 +282,9 @@ function corporateNameSignal(name) {
     'associates'
   ];
 
-  return corporateWords.some(word => businessName.includes(word));
+  return corporateWords.some(word =>
+    businessName.includes(word)
+  );
 }
 
 function openingHoursMissingOrWeak(place) {
@@ -270,10 +292,14 @@ function openingHoursMissingOrWeak(place) {
 
   if (!hours) return true;
 
-  const weekdayDescriptions = hours.weekdayDescriptions || [];
+  const weekdayDescriptions =
+    hours.weekdayDescriptions || [];
   const periods = hours.periods || [];
 
-  if (weekdayDescriptions.length === 0 && periods.length === 0) {
+  if (
+    weekdayDescriptions.length === 0 &&
+    periods.length === 0
+  ) {
     return true;
   }
 
@@ -351,15 +377,24 @@ function passesSmallBusinessFilters(lead, filters) {
   const score = Number(lead.smallBusinessScore || 0);
   const reviewCount = Number(lead.reviewCount || 0);
 
-  if (filters.smallBusinessOnly && score < filters.minSmallBusinessScore) {
+  if (
+    filters.smallBusinessOnly &&
+    score < filters.minSmallBusinessScore
+  ) {
     return false;
   }
 
-  if (filters.hideHighReviewCompanies && reviewCount >= filters.maxReviewCount) {
+  if (
+    filters.hideHighReviewCompanies &&
+    reviewCount >= filters.maxReviewCount
+  ) {
     return false;
   }
 
-  if (filters.hideProperWebsites && hasRealWebsite(lead.website)) {
+  if (
+    filters.hideProperWebsites &&
+    hasRealWebsite(lead.website)
+  ) {
     return false;
   }
 
@@ -385,7 +420,10 @@ function makeLead(place) {
   const lead = {
     id: place.id,
     businessName: cleanText(place.displayName?.text),
-    phone: cleanText(place.nationalPhoneNumber || place.internationalPhoneNumber),
+    phone: cleanText(
+      place.nationalPhoneNumber ||
+        place.internationalPhoneNumber
+    ),
     website: cleanText(place.websiteUri),
     address: cleanText(place.formattedAddress),
     rating: place.rating || '',
@@ -403,13 +441,23 @@ function makeLead(place) {
   };
 
   const fit = calculateSmallBusinessFit(lead, place);
+
   lead.smallBusinessScore = fit.score;
   lead.smallBusinessReasons = fit.reasons.join(', ');
+
   return lead;
 }
 
-async function searchPlacesPage(textQuery, pageToken = null) {
-  const body = pageToken ? { pageToken } : { textQuery, pageSize: 20 };
+async function searchPlacesPage(
+  textQuery,
+  pageToken = null
+) {
+  const body = pageToken
+    ? { pageToken }
+    : {
+        textQuery,
+        pageSize: 20
+      };
 
   const res = await axios.post(
     'https://places.googleapis.com/v1/places:searchText',
@@ -443,34 +491,66 @@ function collectPlaces({
 
   for (const page of pages) {
     for (const place of page.places) {
-      if (!place.id || localSeenThisSearch.has(place.id)) continue;
+      if (
+        !place.id ||
+        localSeenThisSearch.has(place.id)
+      ) {
+        continue;
+      }
+
       localSeenThisSearch.add(place.id);
       candidatesChecked += 1;
 
-      if (hasBusinessBeenSeen(db, place)) continue;
+      // Normal searches hide businesses returned previously.
+      // The no-website search can return them again.
+      if (
+        !noWebsiteOnly &&
+        hasBusinessBeenSeen(db, place)
+      ) {
+        continue;
+      }
 
       const lead = makeLead(place);
-      if (noWebsiteOnly && lead.website) continue;
-      if (!passesSmallBusinessFilters(lead, filters)) continue;
-      if (results.length >= safeMaxLeads) continue;
+
+      if (noWebsiteOnly && lead.website) {
+        continue;
+      }
+
+      if (!passesSmallBusinessFilters(lead, filters)) {
+        continue;
+      }
+
+      if (results.length >= safeMaxLeads) {
+        continue;
+      }
 
       results.push(lead);
-      markBusinessAsSeen(db, lead);
+      markBusinessAsAsAsSeen(db, lead);
     }
   }
 
   return candidatesChecked;
 }
 
-async function searchPlaces(niche, location, maxLeads, filters, noWebsiteOnly = false) {
+async function searchPlaces(
+  niche,
+  location,
+  maxLeads,
+  filters,
+  noWebsiteOnly = false
+) {
   const results = [];
   const localSeenThisSearch = new Set();
   const db = readDb();
+
   let candidatesChecked = 0;
 
   const safeMaxLeads = Math.max(
     1,
-    Math.min(Number(maxLeads || 20), MAX_LEADS_PER_SEARCH)
+    Math.min(
+      Number(maxLeads || 20),
+      MAX_LEADS_PER_SEARCH
+    )
   );
 
   const cleanNiche = normalizeInput(niche);
@@ -514,16 +594,25 @@ async function searchPlaces(niche, location, maxLeads, filters, noWebsiteOnly = 
 
   for (
     let pageNumber = 2;
-    results.length < safeMaxLeads && pageNumber <= 3;
+    results.length < safeMaxLeads &&
+    pageNumber <= 3;
     pageNumber += 1
   ) {
-    const withTokens = active.filter(page => page.nextPageToken);
-    if (!withTokens.length) break;
+    const withTokens = active.filter(
+      page => page.nextPageToken
+    );
+
+    if (!withTokens.length) {
+      break;
+    }
 
     const settled = await Promise.allSettled(
       withTokens.map(async page => ({
         textQuery: page.textQuery,
-        ...(await searchPlacesPage(page.textQuery, page.nextPageToken))
+        ...(await searchPlacesPage(
+          page.textQuery,
+          page.nextPageToken
+        ))
       }))
     );
 
@@ -547,8 +636,10 @@ async function searchPlaces(niche, location, maxLeads, filters, noWebsiteOnly = 
   if (noWebsiteOnly) {
     results.sort(
       (a, b) =>
-        Number(Boolean(b.phone)) - Number(Boolean(a.phone)) ||
-        Number(b.reviewCount || 0) - Number(a.reviewCount || 0)
+        Number(Boolean(b.phone)) -
+          Number(Boolean(a.phone)) ||
+        Number(b.reviewCount || 0) -
+          Number(a.reviewCount || 0)
     );
   } else {
     results.sort(
@@ -557,6 +648,10 @@ async function searchPlaces(niche, location, maxLeads, filters, noWebsiteOnly = 
         Number(a.smallBusinessScore || 0)
     );
   }
+
+  // Preserve usage added while the search was running.
+  const latestDb = readDb();
+  db.usage = latestDb.usage;
 
   writeDb(db);
 
@@ -574,7 +669,8 @@ app.post('/api/search', async (req, res) => {
   try {
     if (!API_KEY) {
       return res.status(500).json({
-        error: 'Missing GOOGLE_PLACES_API_KEY environment variable on Render.'
+        error:
+          'Missing GOOGLE_PLACES_API_KEY environment variable on Render.'
       });
     }
 
@@ -583,18 +679,35 @@ app.post('/api/search', async (req, res) => {
 
     const maxLeads = Math.max(
       1,
-      Math.min(Number(req.body.maxLeads || 20), MAX_LEADS_PER_SEARCH)
+      Math.min(
+        Number(req.body.maxLeads || 20),
+        MAX_LEADS_PER_SEARCH
+      )
     );
 
     const filters = {
-      smallBusinessOnly: Boolean(req.body.smallBusinessOnly),
+      smallBusinessOnly: Boolean(
+        req.body.smallBusinessOnly
+      ),
       minSmallBusinessScore: Math.max(
         0,
-        Math.min(100, Number(req.body.minSmallBusinessScore || 60))
+        Math.min(
+          100,
+          Number(
+            req.body.minSmallBusinessScore || 60
+          )
+        )
       ),
-      hideHighReviewCompanies: Boolean(req.body.hideHighReviewCompanies),
-      maxReviewCount: Math.max(1, Number(req.body.maxReviewCount || 100)),
-      hideProperWebsites: Boolean(req.body.hideProperWebsites)
+      hideHighReviewCompanies: Boolean(
+        req.body.hideHighReviewCompanies
+      ),
+      maxReviewCount: Math.max(
+        1,
+        Number(req.body.maxReviewCount || 100)
+      ),
+      hideProperWebsites: Boolean(
+        req.body.hideProperWebsites
+      )
     };
 
     if (!niche || !location) {
@@ -603,7 +716,8 @@ app.post('/api/search', async (req, res) => {
       });
     }
 
-    const noWebsiteOnly = req.body.noWebsiteOnly === true;
+    const noWebsiteOnly =
+      req.body.noWebsiteOnly === true;
 
     if (noWebsiteOnly) {
       filters.smallBusinessOnly = false;
@@ -611,13 +725,14 @@ app.post('/api/search', async (req, res) => {
       filters.hideProperWebsites = true;
     }
 
-    const { leads, candidatesChecked } = await searchPlaces(
-      niche,
-      location,
-      maxLeads,
-      filters,
-      noWebsiteOnly
-    );
+    const { leads, candidatesChecked } =
+      await searchPlaces(
+        niche,
+        location,
+        maxLeads,
+        filters,
+        noWebsiteOnly
+      );
 
     const searchId = uuidv4();
     const db = readDb();
@@ -655,70 +770,156 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
-app.patch('/api/search/:searchId/lead/:leadId', (req, res) => {
-  const db = readDb();
-  const search = db.searches[req.params.searchId];
+app.patch(
+  '/api/search/:searchId/lead/:leadId',
+  (req, res) => {
+    const db = readDb();
+    const search = db.searches[req.params.searchId];
 
-  if (!search) {
-    return res.status(404).json({ error: 'Search not found.' });
-  }
-
-  const lead = search.leads.find(l => l.id === req.params.leadId);
-
-  if (!lead) {
-    return res.status(404).json({ error: 'Lead not found.' });
-  }
-
-  [
-    'called',
-    'status',
-    'notes',
-    'ownerName',
-    'ownerPhone',
-    'email',
-    'followUpDate'
-  ].forEach(key => {
-    if (req.body[key] !== undefined) {
-      lead[key] = req.body[key];
+    if (!search) {
+      return res
+        .status(404)
+        .json({ error: 'Search not found.' });
     }
-  });
 
-  writeDb(db);
+    const lead = search.leads.find(
+      item => item.id === req.params.leadId
+    );
 
-  res.json({
-    ok: true,
-    lead
-  });
-});
+    if (!lead) {
+      return res
+        .status(404)
+        .json({ error: 'Lead not found.' });
+    }
 
-async function writeLeadsWorkbook(res, leads, filenameBase) {
+    [
+      'called',
+      'status',
+      'notes',
+      'ownerName',
+      'ownerPhone',
+      'email',
+      'followUpDate'
+    ].forEach(key => {
+      if (req.body[key] !== undefined) {
+        lead[key] = req.body[key];
+      }
+    });
+
+    writeDb(db);
+
+    res.json({
+      ok: true,
+      lead
+    });
+  }
+);
+
+async function writeLeadsWorkbook(
+  res,
+  leads,
+  filenameBase
+) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('All Leads');
 
   sheet.columns = [
-    { header: 'Business Name', key: 'businessName', width: 32 },
-    { header: 'Phone', key: 'phone', width: 18 },
-    { header: 'Website', key: 'website', width: 34 },
-    { header: 'Address', key: 'address', width: 42 },
-    { header: 'Rating', key: 'rating', width: 10 },
-    { header: 'Review Count', key: 'reviewCount', width: 14 },
-    { header: 'Small Biz Score', key: 'smallBusinessScore', width: 16 },
-    { header: 'Small Biz Reasons', key: 'smallBusinessReasons', width: 48 },
-    { header: 'Google Maps', key: 'googleMaps', width: 34 },
-    { header: 'Called?', key: 'called', width: 12 },
-    { header: 'Status', key: 'status', width: 18 },
-    { header: 'Owner Name', key: 'ownerName', width: 22 },
-    { header: 'Owner Phone', key: 'ownerPhone', width: 18 },
-    { header: 'Email', key: 'email', width: 28 },
-    { header: 'Follow Up Date', key: 'followUpDate', width: 16 },
-    { header: 'Notes', key: 'notes', width: 40 }
+    {
+      header: 'Business Name',
+      key: 'businessName',
+      width: 32
+    },
+    {
+      header: 'Phone',
+      key: 'phone',
+      width: 18
+    },
+    {
+      header: 'Website',
+      key: 'website',
+      width: 34
+    },
+    {
+      header: 'Address',
+      key: 'address',
+      width: 42
+    },
+    {
+      header: 'Rating',
+      key: 'rating',
+      width: 10
+    },
+    {
+      header: 'Review Count',
+      key: 'reviewCount',
+      width: 14
+    },
+    {
+      header: 'Small Biz Score',
+      key: 'smallBusinessScore',
+      width: 16
+    },
+    {
+      header: 'Small Biz Reasons',
+      key: 'smallBusinessReasons',
+      width: 48
+    },
+    {
+      header: 'Google Maps',
+      key: 'googleMaps',
+      width: 34
+    },
+    {
+      header: 'Called?',
+      key: 'called',
+      width: 12
+    },
+    {
+      header: 'Status',
+      key: 'status',
+      width: 18
+    },
+    {
+      header: 'Owner Name',
+      key: 'ownerName',
+      width: 22
+    },
+    {
+      header: 'Owner Phone',
+      key: 'ownerPhone',
+      width: 18
+    },
+    {
+      header: 'Email',
+      key: 'email',
+      width: 28
+    },
+    {
+      header: 'Follow Up Date',
+      key: 'followUpDate',
+      width: 16
+    },
+    {
+      header: 'Notes',
+      key: 'notes',
+      width: 40
+    }
   ];
 
   sheet.addRows(leads);
 
-  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).font = {
+    bold: true
+  };
+
   sheet.autoFilter = 'A1:P1';
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  sheet.views = [
+    {
+      state: 'frozen',
+      ySplit: 1
+    }
+  ];
 
   sheet.eachRow(row => {
     row.alignment = {
@@ -748,19 +949,35 @@ async function writeLeadsWorkbook(res, leads, filenameBase) {
 
 app.post('/api/export', async (req, res) => {
   try {
-    const { niche = 'leads', location = 'area', leads = [] } = req.body || {};
+    const {
+      niche = 'leads',
+      location = 'area',
+      leads = []
+    } = req.body || {};
 
-    if (!Array.isArray(leads) || leads.length === 0) {
-      return res.status(400).send('No leads to export.');
+    if (
+      !Array.isArray(leads) ||
+      leads.length === 0
+    ) {
+      return res
+        .status(400)
+        .send('No leads to export.');
     }
 
-    await writeLeadsWorkbook(res, leads, `${niche}_${location}`);
+    await writeLeadsWorkbook(
+      res,
+      leads,
+      `${niche}_${location}`
+    );
   } catch (err) {
-    res.status(500).send(err.message || 'Export failed.');
+    res
+      .status(500)
+      .send(err.message || 'Export failed.');
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Voxa Lead Finder running on port ${PORT}`);
+  console.log(
+    `Voxa Lead Finder running on port ${PORT}`
+  );
 });
-
