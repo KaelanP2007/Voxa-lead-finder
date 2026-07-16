@@ -306,3 +306,21 @@ td {
     margin-top: 12px;
   }
 }
+
+
+.searchActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.noWebsite {
+  background: #059669;
+}
+
+.searchHint {
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
