@@ -122,9 +122,19 @@ function makeFallbackBusinessKey(lead) {
     .replace(/^_+|_+$/g, '');
 }
 
+function ensureSeenBusinesses(db) {
+  if (!db.seenBusinesses) {
+    db.seenBusinesses = {};
+  }
+
+  return db.seenBusinesses;
+}
+
 function markBusinessAsSeen(db, lead) {
+  const seenBusinesses = ensureSeenBusinesses(db);
+
   if (lead.id) {
-    db.seenBusinesses[`place:${lead.id}`] = {
+    seenBusinesses[`place:${lead.id}`] = {
       businessName: lead.businessName || '',
       address: lead.address || '',
       firstSeenAt: new Date().toISOString()
@@ -134,7 +144,7 @@ function markBusinessAsSeen(db, lead) {
   const fallbackKey = makeFallbackBusinessKey(lead);
 
   if (fallbackKey && fallbackKey !== '|') {
-    db.seenBusinesses[`fallback:${fallbackKey}`] = {
+    seenBusinesses[`fallback:${fallbackKey}`] = {
       businessName: lead.businessName || '',
       address: lead.address || '',
       firstSeenAt: new Date().toISOString()
@@ -143,7 +153,9 @@ function markBusinessAsSeen(db, lead) {
 }
 
 function hasBusinessBeenSeen(db, place) {
-  if (place.id && db.seenBusinesses[`place:${place.id}`]) {
+  const seenBusinesses = ensureSeenBusinesses(db);
+
+  if (place.id && seenBusinesses[`place:${place.id}`]) {
     return true;
   }
 
@@ -156,7 +168,7 @@ function hasBusinessBeenSeen(db, place) {
 
   if (
     fallbackKey &&
-    db.seenBusinessesBusinesses[`fallback:${fallbackKey}`]
+    seenBusinesses[`fallback:${fallbackKey}`]
   ) {
     return true;
   }
@@ -501,8 +513,6 @@ function collectPlaces({
       localSeenThisSearch.add(place.id);
       candidatesChecked += 1;
 
-      // Normal searches hide businesses returned previously.
-      // The no-website search can return them again.
       if (
         !noWebsiteOnly &&
         hasBusinessBeenSeen(db, place)
@@ -525,7 +535,7 @@ function collectPlaces({
       }
 
       results.push(lead);
-      markBusinessAsAsAsSeen(db, lead);
+      markBusinessAsSeen(db, lead);
     }
   }
 
@@ -649,10 +659,8 @@ async function searchPlaces(
     );
   }
 
-  // Preserve usage added while the search was running.
   const latestDb = readDb();
   db.usage = latestDb.usage;
-
   writeDb(db);
 
   return {
